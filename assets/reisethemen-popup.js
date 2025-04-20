@@ -78,7 +78,7 @@ jQuery(document).ready(function($) {
                 btn.text('✅ Synchronisiert – speichere...');
                 syncStatus.text('Letzte Synchronisation: erfolgreich');
                 
-                // Nur einmal speichern
+                // Nur einmal speichern mit Fehlerbehandlung
                 try {
                     wp.data.dispatch('core/editor').savePost().then(() => {
                         btn.prop('disabled', false).text('🔄 Synchronisieren & Speichern');
@@ -121,7 +121,10 @@ jQuery(document).ready(function($) {
             '.editor-header__settings',
             '.edit-post-header__settings',
             '.edit-post-header-toolbar__right',
-            '.editor-post-publish-panel__header'
+            '.editor-post-publish-panel__header',
+            // JetEngine-spezifische Selektoren hinzugefügt
+            '.jet-engine-meta-box-holder',
+            '.elementor-panel-footer-content'
         ];
         
         let buttonInserted = false;
@@ -147,6 +150,16 @@ jQuery(document).ready(function($) {
                 wrapper.append(syncButton).append(syncStatus);
                 saveBtn.parent().before(wrapper);
                 console.log('IR Tours: Sync-Button als Fallback eingefügt');
+            } else {
+                // Zweiter Fallback: JetEngine-Checkboxen finden und danach platzieren
+                const jetCheckboxes = $('input[name^="reisethemen_meta["]');
+                if (jetCheckboxes.length && !$('.ir-sync-button-added').length) {
+                    const firstCheckbox = jetCheckboxes.first();
+                    const wrapper = $('<div class="ir-sync-button-added" style="display:flex; align-items:center; gap:0.75em; margin:10px 0 20px;"></div>');
+                    wrapper.append(syncButton).append(syncStatus);
+                    firstCheckbox.closest('.cx-control').after(wrapper);
+                    console.log('IR Tours: Sync-Button neben Reisethemen-Checkbox eingefügt');
+                }
             }
         }
     };

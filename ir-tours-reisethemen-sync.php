@@ -2,7 +2,7 @@
 /*
 Plugin Name: IR Tours Reisethemen Sync (AJAX + Button)
 Description: AJAX-Synchronisation der Reisethemen mit zusätzlichem Button und Feedback. Zeigt Hinweis bei zu alter PHP-Version.
-Version: 3.8
+Version: 3.9
 Author: Joseph Kisler - Webwerkstatt, Freiung 16/2/4, A-4600 Wels
 */
 
@@ -62,16 +62,29 @@ function ir_sync_reisethemen($post_id) {
     $terms_sorted = [];
     foreach ($selected_terms as $term_id_or_slug) {
         // Fehler beim Zugriff auf Term-Eigenschaften vermeiden
-        $term = null;
-        if (is_numeric($term_id_or_slug)) {
-            $term = @get_term_by('id', intval($term_id_or_slug), 'reisethemen');
-        } else {
-            $term = @get_term_by('slug', sanitize_text_field($term_id_or_slug), 'reisethemen');
+        try {
+            $term = null;
+            if (is_numeric($term_id_or_slug)) {
+                $term = @get_term_by('id', intval($term_id_or_slug), 'reisethemen');
+            } else {
+                $term = @get_term_by('slug', sanitize_text_field($term_id_or_slug), 'reisethemen');
+            }
+            
+            if ($term && !is_wp_error($term) && isset($term->name) && isset($term->term_id)) {
+                $terms_sorted[$term->name] = $term->term_id;
+            }
+        } catch (Exception $e) {
+            // Fehler beim Term-Zugriff abfangen und ignorieren
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Fehler beim Zugriff auf Reisethemen-Term: ' . $e->getMessage());
+            }
         }
-        
-        if ($term && !is_wp_error($term) && isset($term->name) && isset($term->term_id)) {
-            $terms_sorted[$term->name] = $term->term_id;
-        }
+    }
+
+    // Wenn keine gültigen Terms gefunden wurden
+    if (empty($terms_sorted)) {
+        wp_set_object_terms($post_id, [], 'reisethemen');
+        return ['status' => 'cleared', 'terms' => []];
     }
 
     // Sortieren und Taxonomie-Terme setzen
@@ -237,11 +250,20 @@ add_action('enqueue_block_editor_assets', function() {
             return;
         }
         
+        // Prüfen, ob die Datei existiert
+        $js_path = plugin_dir_path(__FILE__) . 'assets/reisethemen-popup.js';
+        if (!file_exists($js_path)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('IR Tours: JavaScript-Datei nicht gefunden: ' . $js_path);
+            }
+            return;
+        }
+        
         wp_enqueue_script(
             'reisethemen-popup',
             plugin_dir_url(__FILE__) . 'assets/reisethemen-popup.js',
             ['jquery', 'wp-data', 'wp-editor'],
-            filemtime(plugin_dir_path(__FILE__) . 'assets/reisethemen-popup.js'), // Cache-Busting
+            filemtime($js_path), // Cache-Busting
             true
         );
     
@@ -251,7 +273,41 @@ add_action('enqueue_block_editor_assets', function() {
             'pluginUrl' => plugin_dir_url(__FILE__),
         ]);
     } catch (Exception $e) {
+        // Fehler stumm abfangen und ggf. loggen
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Fehler beim Laden der Reisethemen-JS: ' . $e->getMessage());
+        }
+    }
+});
+
+// Elementor-Support hinzufügen
+add_action('elementor/editor/before_enqueue_scripts', function() {
+    try {
+        // Prüfen, ob die Datei existiert
+        $js_path = plugin_dir_path(__FILE__) . 'assets/reisethemen-popup.js';
+        if (!file_exists($js_path) || get_post_type() !== 'ir-tours') {
+            return;
+        }
+        
+        wp_enqueue_script(
+            'reisethemen-popup-elementor',
+            plugin_dir_url(__FILE__) . 'assets/reisethemen-popup.js',
+            ['jquery'],
+            filemtime($js_path), // Cache-Busting
+            true
+        );
+    
+        wp_localize_script('reisethemen-popup-elementor', 'irSyncAjax', [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('ir_reisethemen_sync_nonce'),
+            'pluginUrl' => plugin_dir_url(__FILE__),
+            'isElementor' => 'true'
+        ]);
+    } catch (Exception $e) {
         // Fehler stumm abfangen
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Fehler beim Laden der Reisethemen-JS für Elementor: ' . $e->getMessage());
+        }
     }
 });
 
