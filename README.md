@@ -1,4 +1,4 @@
-# Crocoblock Sync
+# Crocoblock Sync/alpha1
 
 Ein konfigurierbares WordPress-Plugin zur Synchronisation von Custom Post Type - Meta-Feldern mit Taxonomien für JetEngine/Crocoblock und ACF.
 
